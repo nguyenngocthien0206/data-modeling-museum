@@ -11,7 +11,7 @@ import pyarrow.parquet as pq
 from museum.generator import generate, load_profile
 from museum.generator.schemas import KEYS, SCHEMAS
 
-from .conftest import scalar, tiny_profile
+from ..helpers import scalar, tiny_profile
 
 
 def file_hashes(root):
