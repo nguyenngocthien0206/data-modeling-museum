@@ -52,4 +52,4 @@ See [README.md](README.md) for how statuses work.
 | C03 | No aggregate built for a specific question | Design 6, 12.6 | | |
 | C04 | Derived columns only from the allowed list | Design 12.2 | | |
 | C05 | Incremental build equals a full refresh | Design 6 | | |
-| C06 | Every table a question reads lives in `3nf.duckdb`; tuning limited to materialization and sort order | Design 6, 12.6 | | |
+| C06 | Every table a question reads lives in `three_nf.duckdb`; tuning limited to materialization and sort order | Design 6, 12.6 | | |

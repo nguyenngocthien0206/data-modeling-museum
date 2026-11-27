@@ -421,7 +421,7 @@ See section 15. The README invites pull requests from anyone who thinks a model 
 
 - Python 3.11+, uv, dbt-core 1.x with dbt-duckdb, DuckDB, Faker, numpy, pyarrow, sqlglot, pytest, ruff, matplotlib for charts.
 - dbt v2 (Fusion) is not used yet: its DuckDB adapter is in beta and cannot load extensions.
-- One dbt project in `warehouse/`. Each model writes to its own DuckDB file under `data/<scale>/warehouse/` (attached through dbt-duckdb); staging lives in a shared file. Storage is measured per file, and the question runner attaches only the model under test, so a question cannot read another model's tables by accident. See ADR-0005.
+- One dbt project in `warehouse/`. Staging is the main database, `data/<scale>/warehouse/staging.duckdb`; each model writes to its own attached file: `three_nf.duckdb` (the 3NF model, since a catalog name cannot start with a digit), `kimball.duckdb`, `data_vault.duckdb`, `obt.duckdb`. Storage is measured per file, and the question runner opens only the model under test, so a question cannot read another model's tables by accident. `museum build` runs dbt in a child process, which keeps the files unlocked for readers afterwards. See ADR-0005.
 - No Docker for the main path. A reader runs everything right after `git clone`.
 
 Commands (the CLI is the real entry point; the Makefile wraps it for convenience, since `make` is often missing on Windows):
