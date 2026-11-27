@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import sys
 from collections.abc import Sequence
+from datetime import date
 from pathlib import Path
 
 from museum import __version__
@@ -42,6 +43,10 @@ def build_parser() -> argparse.ArgumentParser:
     build = commands.add_parser("build", help="build staging and the data models")
     _add_scale(build)
     build.add_argument("--model", choices=MODELS, help="build only this model")
+    build.add_argument("--data-dir", type=Path, default=Path("data"), help="root of data/<scale>")
+    build.add_argument(
+        "--as-of", type=date.fromisoformat, default=None, help="hide extracts after this date"
+    )
 
     verify = commands.add_parser("verify", help="check every model against the reference answers")
     _add_scale(verify)
@@ -82,10 +87,28 @@ def run_generate(args: argparse.Namespace) -> int:
     return 0
 
 
+def run_build(args: argparse.Namespace) -> int:
+    from museum.warehouse import BuildError, Paths, build
+
+    paths = Paths.for_scale(args.data_dir, args.scale)
+    try:
+        built = build(args.model, paths, as_of=args.as_of)
+    except NotImplementedError as error:
+        print(f"museum build: {error}", file=sys.stderr)
+        return NOT_IMPLEMENTED
+    except BuildError as error:
+        print(f"museum build: {error}", file=sys.stderr)
+        return 1
+    print(f"built {', '.join(built)} for {args.scale} in {paths.warehouse}")
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command == "generate":
         return run_generate(args)
+    if args.command == "build":
+        return run_build(args)
     name = args.command if args.command != "challenge" else f"challenge {args.action}"
     print(f"museum {name}: not implemented yet", file=sys.stderr)
     return NOT_IMPLEMENTED
