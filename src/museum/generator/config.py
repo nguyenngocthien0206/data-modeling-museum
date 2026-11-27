@@ -11,6 +11,7 @@ from pathlib import Path
 import yaml
 
 PROFILE_NAMES = ("small", "medium", "large")
+MIN_DAYS_FOR_STORE_CHANGES = 150  # openings fall in [60, n-60], closings in [90, n-30]
 
 
 class ProfileError(ValueError):
@@ -23,7 +24,9 @@ class Profile:
     seed: int
     start: date
     end: date
-    stores: int
+    stores: int  # open on the first day
+    new_stores: int  # opened during the period
+    closed_stores: int  # closed during the period
     orders_per_store_day: float
     extra_lines_per_order: float
     members: int
@@ -36,6 +39,12 @@ class Profile:
     monthly_turnover: float
     monthly_transfer: float
     shift_correction_rate: float
+    address_move_monthly: float
+    price_changes: int  # individual product price changes, on top of chain-wide rounds
+    price_override_share: float
+    promotion_edit_share: float
+    late_store_day_share: float
+    correction_share: float
     expect_orders: tuple[int, int]
     expect_lines: tuple[int, int]
 
@@ -57,6 +66,15 @@ class Profile:
         for name in ("stores", "members", "staff_per_slot"):
             if getattr(self, name) < 1:
                 raise ProfileError(f"{name} must be at least 1")
+        for name in ("new_stores", "closed_stores", "price_changes"):
+            if getattr(self, name) < 0:
+                raise ProfileError(f"{name} cannot be negative")
+        if self.closed_stores >= self.stores:
+            raise ProfileError("closed_stores must leave at least one original store open")
+        if (self.new_stores or self.closed_stores) and self.n_days < MIN_DAYS_FOR_STORE_CHANGES:
+            raise ProfileError(
+                f"opening or closing stores needs a period of {MIN_DAYS_FOR_STORE_CHANGES} days"
+            )
         if self.orders_per_store_day <= 0:
             raise ProfileError("orders_per_store_day must be positive")
         rates = (
@@ -67,6 +85,11 @@ class Profile:
             "monthly_turnover",
             "monthly_transfer",
             "shift_correction_rate",
+            "address_move_monthly",
+            "price_override_share",
+            "promotion_edit_share",
+            "late_store_day_share",
+            "correction_share",
         )
         for name in rates:
             if not 0 <= getattr(self, name) <= 1:
@@ -89,24 +112,35 @@ def _require(raw: dict, *keys: str):
 
 
 def parse_profile(raw: dict) -> Profile:
+    def number(kind, *keys):
+        return kind(_require(raw, *keys))
+
     profile = Profile(
         name=str(_require(raw, "name")),
-        seed=int(_require(raw, "seed")),
+        seed=number(int, "seed"),
         start=_require(raw, "period", "start"),
         end=_require(raw, "period", "end"),
-        stores=int(_require(raw, "stores")),
-        orders_per_store_day=float(_require(raw, "orders_per_store_day")),
-        extra_lines_per_order=float(_require(raw, "extra_lines_per_order")),
-        members=int(_require(raw, "members")),
-        guest_share=float(_require(raw, "guest_share")),
-        promo_one=float(_require(raw, "promotion_shares", "one")),
-        promo_two=float(_require(raw, "promotion_shares", "two")),
-        promo_three=float(_require(raw, "promotion_shares", "three")),
-        promotions_per_month=float(_require(raw, "promotions_per_month")),
-        staff_per_slot=int(_require(raw, "workforce", "staff_per_slot")),
-        monthly_turnover=float(_require(raw, "workforce", "monthly_turnover")),
-        monthly_transfer=float(_require(raw, "workforce", "monthly_transfer")),
-        shift_correction_rate=float(_require(raw, "workforce", "shift_correction_rate")),
+        stores=number(int, "stores", "at_start"),
+        new_stores=number(int, "stores", "opened"),
+        closed_stores=number(int, "stores", "closed"),
+        orders_per_store_day=number(float, "orders_per_store_day"),
+        extra_lines_per_order=number(float, "extra_lines_per_order"),
+        members=number(int, "members"),
+        guest_share=number(float, "guest_share"),
+        promo_one=number(float, "promotion_shares", "one"),
+        promo_two=number(float, "promotion_shares", "two"),
+        promo_three=number(float, "promotion_shares", "three"),
+        promotions_per_month=number(float, "promotions_per_month"),
+        staff_per_slot=number(int, "workforce", "staff_per_slot"),
+        monthly_turnover=number(float, "workforce", "monthly_turnover"),
+        monthly_transfer=number(float, "workforce", "monthly_transfer"),
+        shift_correction_rate=number(float, "workforce", "shift_correction_rate"),
+        address_move_monthly=number(float, "history", "address_move_monthly"),
+        price_changes=number(int, "history", "price_changes"),
+        price_override_share=number(float, "history", "price_override_share"),
+        promotion_edit_share=number(float, "history", "promotion_edit_share"),
+        late_store_day_share=number(float, "delivery", "late_store_day_share"),
+        correction_share=number(float, "delivery", "correction_share"),
         expect_orders=tuple(_require(raw, "expect", "orders")),
         expect_lines=tuple(_require(raw, "expect", "order_lines")),
     )

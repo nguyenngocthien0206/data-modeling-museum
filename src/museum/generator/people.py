@@ -1,24 +1,28 @@
-"""People: name pools, unique phone numbers, and the member base.
+"""People: name pools, unique phone numbers, and the member base with its history.
 
 Faker's vi_VN name formats put the given name first ("Nam Nguyễn"), which is not how
 Vietnamese names are written. We only take Faker's lists of family, middle and given
 names and compose them in Vietnamese order: family, middle, given. Faker is also too slow
 to call once per person at the large scale, so it fills small pools once and numpy picks
 from them.
+
+The customer table is overwritten in place by the source: an address move or a tier
+change replaces the row. Each change lands in the extract of its day, and several changes
+on the same day land as one row (the end-of-day state).
 """
 
 from __future__ import annotations
 
 import unicodedata
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 import numpy as np
 from faker import Faker
 from faker.providers.person.vi_VN import Provider as VietnameseNames
 
 from museum.generator.config import Profile
-from museum.generator.reference import Geography, Store
+from museum.generator.reference import TIERS, Geography, Store, at
 
 MOBILE_PREFIXES = (
     "032", "033", "034", "035", "036", "037", "038", "039",
@@ -33,6 +37,8 @@ STREET_POOL_SIZE = 2000
 PRIOR_MEMBER_SHARE = 0.3
 PRIOR_MEMBER_DAYS = 730
 MEAN_MEMBER_LIFETIME_DAYS = 420
+MOVE_ACROSS_PROVINCES = 0.2
+TIER_REVIEW_SECOND = 3 * 3600  # tiers are recomputed at 03:00 on the first of the month
 
 
 @dataclass
@@ -109,9 +115,14 @@ class Members:
     customer_id: np.ndarray
     join_day: np.ndarray  # day index; negative means before the simulated period
     churn_day: np.ndarray  # first day the member no longer buys
-    home_store: np.ndarray  # store index
     weight: np.ndarray  # how often the member buys, relative to others
-    columns: dict  # customer table rows, one per member, in customer_id order
+    home_store: np.ndarray  # store index where the member usually buys
+    later_home: np.ndarray  # store index after the home store closed (same if never)
+    home_switch_day: np.ndarray  # day the member moves to later_home
+    columns: dict  # customer rows as at joining, in customer_id order
+
+    def __len__(self) -> int:
+        return len(self.customer_id)
 
     def landing_day(self) -> np.ndarray:
         return np.maximum(self.join_day, 0)
@@ -119,6 +130,13 @@ class Members:
     def active_on(self, day: int) -> np.ndarray:
         """Members who can place an order on this day (joined on an earlier day, not churned)."""
         return (self.join_day < day) & (self.churn_day > day)
+
+    def pools(self, n_stores: int) -> tuple[list[np.ndarray], list[np.ndarray]]:
+        """Per store: members who start there, and members who arrive after a closure."""
+        before = [np.flatnonzero(self.home_store == s) for s in range(n_stores)]
+        moved = self.later_home != self.home_store
+        after = [np.flatnonzero(moved & (self.later_home == s)) for s in range(n_stores)]
+        return before, after
 
 
 def build_members(
@@ -130,21 +148,36 @@ def build_members(
     rng: np.random.Generator,
 ) -> Members:
     n = profile.members
-    store_weight = np.array([s.size for s in stores])
-    home_store = rng.choice(len(stores), size=n, p=store_weight / store_weight.sum())
-    opened_index = np.array([(s.opened_on - profile.start).days for s in stores])
-
     prior = rng.random(n) < PRIOR_MEMBER_SHARE
     join_day = np.where(
         prior,
         rng.integers(-PRIOR_MEMBER_DAYS, 0, size=n),
         rng.integers(0, profile.n_days, size=n),
     )
-    join_day = np.maximum(join_day, opened_index[home_store])
+    join_day = np.maximum(join_day, min(s.open_day for s in stores))
     join_second = rng.integers(7 * 3600, 21 * 3600, size=n)
-
     order = np.lexsort((join_second, join_day))
-    home_store, join_day, join_second = home_store[order], join_day[order], join_second[order]
+    join_day, join_second = join_day[order], join_second[order]
+
+    size = np.array([s.size for s in stores])
+    home_store = np.empty(n, dtype=np.int64)
+    for day in np.unique(join_day):
+        joining = np.flatnonzero(join_day == day)
+        weight = size * np.array([s.trades_on(int(day)) for s in stores])
+        home_store[joining] = rng.choice(len(stores), size=len(joining), p=weight / weight.sum())
+
+    later_home = home_store.copy()
+    switch_day = np.full(n, profile.n_days, dtype=np.int64)
+    for store in stores:
+        if store.close_day >= profile.n_days:
+            continue
+        leaving = np.flatnonzero(home_store == store.index)
+        open_after = [s for s in stores if s.trades_on(store.close_day)]
+        nearby = [s for s in open_after if s.province_code == store.province_code] or open_after
+        weight = np.array([s.size for s in nearby])
+        picks = rng.choice(len(nearby), size=len(leaving), p=weight / weight.sum())
+        later_home[leaving] = np.array([nearby[p].index for p in picks], dtype=np.int64)
+        switch_day[leaving] = store.close_day
 
     lifetime = np.maximum(1, rng.exponential(MEAN_MEMBER_LIFETIME_DAYS, size=n).astype(np.int64))
     churn_day = join_day + 1 + lifetime
@@ -161,9 +194,8 @@ def build_members(
     birth_dates = [profile.start - timedelta(days=int(a)) for a in ages_in_days]
     wards = [str(rng.choice(geo.wards_by_province[stores[s].province_code])) for s in home_store]
 
-    customer_id = np.arange(1, n + 1, dtype=np.int64)
     columns = {
-        "customer_id": customer_id,
+        "customer_id": np.arange(1, n + 1, dtype=np.int64),
         "full_name": names,
         "phone": unique_phones(rng, n),
         "email": emails(rng, names),
@@ -171,9 +203,126 @@ def build_members(
         "gender": genders.tolist(),
         "address_line": rng.choice(streets, size=n).tolist(),
         "ward_code": wards,
-        "tier_code": ["MEMBER"] * n,
+        "tier_code": [TIERS[0][0]] * n,
         "joined_at": joined_at,
         "created_at": joined_at,
         "updated_at": joined_at,
     }
-    return Members(customer_id, join_day, churn_day, home_store, weight, columns)
+    return Members(
+        customer_id=columns["customer_id"],
+        join_day=join_day,
+        churn_day=churn_day,
+        weight=weight,
+        home_store=home_store,
+        later_home=later_home,
+        home_switch_day=switch_day,
+        columns=columns,
+    )
+
+
+@dataclass
+class Change:
+    member: int
+    day: int
+    when: datetime
+    ward_code: str | None = None
+    address_line: str | None = None
+    tier_code: str | None = None
+
+
+def address_moves(
+    profile: Profile,
+    members: Members,
+    geo: Geography,
+    streets: list[str],
+    rng: np.random.Generator,
+) -> list[Change]:
+    daily = profile.address_move_monthly / 30
+    first = np.maximum(members.join_day + 1, 1)
+    last = np.minimum(members.churn_day, profile.n_days)
+    span = np.maximum(last - first, 0)
+    counts = rng.poisson(daily * span)
+    province_codes = [code for code, _ in geo.provinces]
+    ward = list(members.columns["ward_code"])
+    moves: list[Change] = []
+    for member in np.flatnonzero(counts):
+        days = np.unique(rng.integers(first[member], last[member], size=counts[member]))
+        for day in days:
+            province = ward[member][:2]
+            if rng.random() < MOVE_ACROSS_PROVINCES:
+                province = str(rng.choice(province_codes))
+            ward[member] = str(rng.choice(geo.wards_by_province[province]))
+            moves.append(
+                Change(
+                    member=int(member),
+                    day=int(day),
+                    when=at(profile.day(int(day)), int(rng.integers(8 * 3600, 22 * 3600))),
+                    ward_code=ward[member],
+                    address_line=str(rng.choice(streets)),
+                )
+            )
+    return moves
+
+
+def month_starts(profile: Profile) -> list[tuple[int, int]]:
+    """(month number since the period start, day index) for each first-of-month after day 0."""
+    out = []
+    day = date(profile.start.year, profile.start.month, 1)
+    month = 0
+    while day <= profile.end:
+        if day > profile.start:
+            out.append((month, (day - profile.start).days))
+        day = (day.replace(day=28) + timedelta(days=4)).replace(day=1)
+        month += 1
+    return out
+
+
+def month_of_day(profile: Profile, day_index: int) -> int:
+    d = profile.day(day_index)
+    return (d.year - profile.start.year) * 12 + d.month - profile.start.month
+
+
+def tier_changes(profile: Profile, members: Members, spend: np.ndarray) -> list[Change]:
+    """Monthly tier review from trailing 12-month net spend (spend is months x members)."""
+    thresholds = np.array([t[3] for t in TIERS])
+    codes = [t[0] for t in TIERS]
+    current = np.zeros(len(members), dtype=np.int64)
+    changes: list[Change] = []
+    for month, day in month_starts(profile):
+        window = spend[max(0, month - 12) : month].sum(axis=0)
+        tier = np.searchsorted(thresholds, window, side="right") - 1
+        eligible = members.join_day < day
+        changed = np.flatnonzero(eligible & (tier != current))
+        when = at(profile.day(day), TIER_REVIEW_SECOND)
+        changes.extend(Change(int(m), day, when, tier_code=codes[tier[m]]) for m in changed)
+        current[changed] = tier[changed]
+    return changes
+
+
+def customer_extracts(profile: Profile, members: Members, changes: list[Change]):
+    """Yield (day, columns) for the customer table: joins plus merged daily changes."""
+    columns = {k: np.asarray(v, dtype=object) for k, v in members.columns.items()}
+    state = {k: columns[k].copy() for k in ("ward_code", "address_line", "tier_code", "updated_at")}
+    joins_by_day: dict[int, np.ndarray] = {}
+    landing = members.landing_day()
+    for day in np.unique(landing):
+        joins_by_day[int(day)] = np.flatnonzero(landing == day)
+    changes_by_day: dict[int, list[Change]] = {}
+    for change in sorted(changes, key=lambda c: (c.day, c.member, c.when)):
+        changes_by_day.setdefault(change.day, []).append(change)
+
+    for day in sorted(set(joins_by_day) | set(changes_by_day)):
+        touched = set(joins_by_day.get(day, np.empty(0, dtype=np.int64)).tolist())
+        for change in changes_by_day.get(day, []):
+            for field_name in ("ward_code", "address_line", "tier_code"):
+                value = getattr(change, field_name)
+                if value is not None:
+                    state[field_name][change.member] = value
+            state["updated_at"][change.member] = max(
+                state["updated_at"][change.member], change.when
+            )
+            touched.add(change.member)
+        idx = np.array(sorted(touched), dtype=np.int64)
+        out = {k: v[idx] for k, v in columns.items()}
+        out.update({k: v[idx] for k, v in state.items()})
+        yield day, out

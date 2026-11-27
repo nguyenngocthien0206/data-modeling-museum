@@ -1,10 +1,13 @@
-# CI and development size: about 90 thousand orders and 150 thousand order lines.
+# CI and development size: about 110 thousand orders and 180 thousand order lines.
 name: small
 seed: 20240101
 period:
   start: 2024-01-01
   end: 2025-06-30
-stores: 8
+stores:
+  at_start: 8
+  opened: 2
+  closed: 1
 orders_per_store_day: 21
 extra_lines_per_order: 0.6
 members: 3000
@@ -19,6 +22,14 @@ workforce:
   monthly_turnover: 0.03
   monthly_transfer: 0.01
   shift_correction_rate: 0.01
+history:
+  address_move_monthly: 0.01
+  price_changes: 8
+  price_override_share: 0.01
+  promotion_edit_share: 0.2
+delivery:
+  late_store_day_share: 0.04
+  correction_share: 0.02
 expect:
   orders: [80000, 120000]
   order_lines: [125000, 200000]

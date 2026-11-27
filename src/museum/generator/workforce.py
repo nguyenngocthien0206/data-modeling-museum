@@ -23,6 +23,8 @@ BUSY_STORE_ORDERS = 120  # stores expecting this many orders a day run three shi
 EXTRA_STAFF = 2
 CORRECTION_LAG_DAYS = (1, 5)
 CORRECTION_MINUTES = (15, 30, 45, 60)
+NEW_STORE_HIRING_DAYS = 7
+CLOSURE_TRANSFER_SHARE = 0.5
 
 
 def store_slots(profile: Profile, store: Store) -> tuple[tuple[int, int], ...]:
@@ -76,10 +78,29 @@ def build_workforce(
         workforce.hired_on[employee_id] = hired_on
         workforce.land(landing_day, row)
 
+    def terminate(employee_id: int, last_day: date, landing_day: int, today: date) -> None:
+        record = employees[employee_id]
+        record["row"]["terminated_on"] = last_day
+        record["row"]["updated_at"] = _office_hours(today, rng)
+        workforce.terminated_on[employee_id] = last_day
+        workforce.land(landing_day, record["row"])
+
+    def transfer(employee_id: int, target: Store, landing_day: int, today: date) -> None:
+        record = employees[employee_id]
+        record["store"] = target.index
+        record["row"]["home_store_id"] = target.store_id
+        record["row"]["updated_at"] = _office_hours(today, rng)
+        workforce.land(landing_day, record["row"])
+        workforce.transfers += 1
+
     for store in stores:
         staff = len(store_slots(profile, store)) * profile.staff_per_slot + EXTRA_STAFF
-        roles = ["store_manager"] + ["barista"] * (staff // 2) + ["cashier"] * staff
-        for role in roles[:staff]:
+        roles = (["store_manager"] + ["barista"] * (staff // 2) + ["cashier"] * staff)[:staff]
+        if store.open_day > 0:  # opens during the period: the team is hired a week before
+            hire_day = max(1, store.open_day - NEW_STORE_HIRING_DAYS)
+            hires_due.setdefault(hire_day, []).extend((store.index, role) for role in roles)
+            continue
+        for role in roles:
             earliest = (store.opened_on - date(2019, 1, 1)).days
             hired_on = date(2019, 1, 1) + timedelta(
                 days=int(rng.integers(earliest, (profile.start - date(2019, 1, 1)).days))
@@ -92,29 +113,35 @@ def build_workforce(
     for d in range(profile.n_days):
         today = profile.day(d)
         for store, role in hires_due.pop(d, []):
+            if stores[store].close_day <= d:
+                continue  # no hiring for a store that has closed
             hire(store, role, today, d, _office_hours(today, rng))
             active.append(len(employees))
+        trading = [s for s in stores if s.trades_on(d)]
+        closing = {s.index for s in stores if s.close_day == d}
         settled = [e for e in active if workforce.hired_on[e] < today]
         leave = rng.random(len(settled)) < p_leave
         move = rng.random(len(settled)) < p_move
         leaving = set()
         for employee_id, quits, moves in zip(settled, leave, move, strict=True):
             record = employees[employee_id]
-            if quits:
-                record["row"]["terminated_on"] = today
-                record["row"]["updated_at"] = _office_hours(today, rng)
-                workforce.terminated_on[employee_id] = today
-                workforce.land(d, record["row"])
+            here = stores[record["store"]]
+            others = [s for s in trading if s.index != here.index]
+            if here.index in closing:
+                # The store closes today: half the team moves nearby, the rest leave.
+                nearby = [s for s in others if s.province_code == here.province_code] or others
+                if nearby and rng.random() < CLOSURE_TRANSFER_SHARE:
+                    transfer(employee_id, nearby[int(rng.integers(len(nearby)))], d, today)
+                else:
+                    terminate(employee_id, today - timedelta(days=1), d, today)
+                    leaving.add(employee_id)
+            elif quits:
+                terminate(employee_id, today, d, today)
                 leaving.add(employee_id)
                 gap = int(rng.integers(3, 15))
                 hires_due.setdefault(d + gap, []).append((record["store"], record["row"]["role"]))
-            elif moves:
-                others = [s.index for s in stores if s.index != record["store"]]
-                record["store"] = int(rng.choice(others))
-                record["row"]["home_store_id"] = stores[record["store"]].store_id
-                record["row"]["updated_at"] = _office_hours(today, rng)
-                workforce.land(d, record["row"])
-                workforce.transfers += 1
+            elif moves and others:
+                transfer(employee_id, others[int(rng.integers(len(others)))], d, today)
         roster: list[list[int]] = [[] for _ in stores]
         for employee_id in active:
             roster[employees[employee_id]["store"]].append(employee_id)
@@ -144,6 +171,9 @@ def build_day_shifts(
     slot_staff: list[list[np.ndarray]] = []
     corrections: list[tuple[int, dict]] = []
     for store in stores:
+        if not store.trades_on(day_index):
+            slot_staff.append([])
+            continue
         slots = store_slots(profile, store)
         roster = np.array(workforce.roster[day_index][store.index], dtype=np.int64)
         if len(roster) == 0:

@@ -9,7 +9,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 from museum.generator import generate, load_profile
-from museum.generator.schemas import SCHEMAS
+from museum.generator.schemas import KEYS, SCHEMAS
 
 from .conftest import scalar, tiny_profile
 
@@ -28,6 +28,14 @@ def test_same_seed_gives_byte_identical_files(tmp_path):
     a = file_hashes(tmp_path / "a" / "tiny" / "landing")
     b = file_hashes(tmp_path / "b" / "tiny" / "landing")
     assert a and a == b
+
+
+def test_parallel_run_gives_the_same_files(tmp_path):
+    generate(tiny_profile(), tmp_path / "a", workers=1)
+    generate(tiny_profile(), tmp_path / "b", workers=2)
+    a = file_hashes(tmp_path / "a" / "tiny" / "landing")
+    b = file_hashes(tmp_path / "b" / "tiny" / "landing")
+    assert a == b
 
 
 def test_different_seed_gives_different_data(tmp_path):
@@ -55,11 +63,11 @@ def test_every_reference_table_lands_on_the_first_day(small_landing):
 
 def test_volumes_fall_inside_the_profile_ranges(small):
     profile = load_profile("small")
-    orders = scalar(small, "select count(*) from sales_order")
-    lines = scalar(small, "select count(*) from order_line")
+    orders = scalar(small, "select count(*) from sales_order_final")
+    lines = scalar(small, "select count(*) from order_line_final")
     assert profile.expect_orders[0] <= orders <= profile.expect_orders[1]
     assert profile.expect_lines[0] <= lines <= profile.expect_lines[1]
-    assert scalar(small, "select count(*) from customer") == profile.members
+    assert scalar(small, "select count(*) from customer_final") == profile.members
 
 
 ORPHANS = {
@@ -81,21 +89,21 @@ def test_references_resolve(small):
 
 
 def test_guests_and_members_both_order(small):
-    share = scalar(small, "select avg((customer_id is not null)::int) from sales_order")
+    share = scalar(small, "select avg((customer_id is not null)::int) from sales_order_final")
     assert 0.45 < share < 0.65
 
 
 def test_orders_stack_promotions_without_exceeding_gross(small):
     stacked = """
         select count(*) from (
-            select order_id from order_promotion group by 1 having count(*) >= 2
+            select order_id from order_promotion_final group by 1 having count(*) >= 2
         )"""
     over = """
         with gross as (
-            select order_id, sum(line_amount) as amount from order_line group by 1
+            select order_id, sum(line_amount) as amount from order_line_final group by 1
         ),
         discount as (
-            select order_id, sum(discount_amount) as amount from order_promotion group by 1
+            select order_id, sum(discount_amount) as amount from order_promotion_final group by 1
         )
         select count(*)
         from discount join gross using (order_id)
@@ -108,7 +116,7 @@ def test_lines_are_priced_and_distinct_within_an_order(small):
     mispriced = "select count(*) from order_line where line_amount <> quantity * unit_price"
     duplicates = """
         select count(*) from (
-            select order_id, product_id from order_line group by all having count(*) > 1
+            select order_id, product_id from order_line_final group by all having count(*) > 1
         )"""
     assert scalar(small, mispriced) == 0
     assert scalar(small, duplicates) == 0
@@ -116,14 +124,9 @@ def test_lines_are_priced_and_distinct_within_an_order(small):
 
 def test_every_cashier_is_on_a_covering_shift(small):
     uncovered = """
-        with final_shift as (
-            select shift_id, store_id, employee_id, shift_start, shift_end
-            from shift
-            qualify row_number() over (partition by shift_id order by updated_at desc) = 1
-        )
-        select count(*) from sales_order o
+        select count(*) from sales_order_final o
         where not exists (
-            select 1 from final_shift s
+            select 1 from shift_final s
             where s.employee_id = o.cashier_employee_id and s.store_id = o.store_id
               and o.ordered_at >= s.shift_start and o.ordered_at < s.shift_end
         )"""
@@ -169,14 +172,8 @@ def test_corrections_only_extend_shifts_and_land_later(small):
 
 
 def test_a_key_appears_at_most_once_per_extract(small):
-    keys = {
-        "shift": "shift_id",
-        "employee": "employee_id",
-        "customer": "customer_id",
-        "sales_order": "order_id",
-        "order_line": "order_id, line_no",
-    }
-    for table_name, key in keys.items():
+    for table_name, columns in KEYS.items():
+        key = ", ".join(columns)
         sql = f"""
             select count(*) from (
                 select {key}, _load_date from {table_name} group by all having count(*) > 1
@@ -185,4 +182,5 @@ def test_a_key_appears_at_most_once_per_extract(small):
 
 
 def test_member_phones_are_unique(small):
-    assert scalar(small, "select count(*) - count(distinct phone) from customer") == 0
+    sql = "select count(*) - count(distinct phone) from customer_final"
+    assert scalar(small, sql) == 0
