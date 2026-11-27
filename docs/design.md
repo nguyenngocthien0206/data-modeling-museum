@@ -75,7 +75,7 @@ Like most real POS systems, the source keeps only the current state. When a cust
 
 ### 4.1 Timeline
 
-- Base period: 2024-01-01 to 2025-06-30 (546 days). It ends the day before Vietnam's 2025 administrative reorganization takes effect (2025-07-01), so the merger challenge can happen "live" after the base.
+- Base period: 2024-01-01 to 2025-06-30 (547 days, 2024 being a leap year). It ends the day before Vietnam's 2025 administrative reorganization takes effect (2025-07-01), so the merger challenge can happen "live" after the base.
 - Challenges append extra days after the base period. Each challenge is applied on its own to the frozen base, never on top of another challenge.
 
 ### 4.2 Daily extracts
@@ -83,27 +83,27 @@ Like most real POS systems, the source keeps only the current state. When a cust
 The generator simulates the source day by day. At the end of each day it writes a delta extract of every table: all rows whose `updated_at` falls in that day, in their end-of-day state. This is the most common batch extraction pattern in practice.
 
 ```
-data/<scale>/landing/<table>/load_date=YYYY-MM-DD/part-0.parquet
+data/<scale>/landing/<table>/load_date=YYYY-MM-DD/part-<name>.parquet
 ```
 
-Each row carries `_load_date`. A key appears at most once per extract. Intra-day intermediate states are lost, exactly as they would be with a real watermark extract, and this loss is the same for every model and for the reference answers.
+A partition can hold several parts: the day's own rows plus late or corrected rows produced by earlier days (each simulated day writes its own part, which is what lets days run in parallel). Each row carries `_load_date`. A key appears at most once per extract. Intra-day intermediate states are lost, exactly as they would be with a real watermark extract, and this loss is the same for every model and for the reference answers.
 
 ### 4.3 What changes over time
 
 | Change | Rule |
 |---|---|
-| New members | Steady sign-ups, more in promotion periods |
+| New members | Steady sign-ups through the period; 30 percent of members joined before it |
 | Tier changes | On the 1st of each month, tier is recomputed from trailing 12-month net spend. Upgrades and downgrades both happen |
 | Address moves | A small monthly share of members move, sometimes to another province |
-| List price changes | A few chain-wide price rounds plus individual product changes, at any time of day |
-| Store lifecycle | New stores open throughout the period, a few close |
+| List price changes | Two chain-wide price rounds (coffee on 2024-07-01, all drinks on 2025-02-01) plus individual product changes at any time of day. A line is priced at the list price in effect at the order time, except about 1 percent of manual overrides |
+| Store lifecycle | New stores appear as `planned` 30 days before opening, switch to `open` on the opening day, and their team is hired a week before. A few stores switch to `closed`; half their staff move to a nearby store, the rest leave. Members of a closed store buy elsewhere |
 | Workforce | Hires and terminations, home store transfers |
-| Promotions | Campaigns with date ranges; some orders stack two or three promotions |
+| Promotions | Campaigns with date ranges, some extended or cut short a few days before they start; some orders stack two or three promotions |
 
 ### 4.4 Late and corrected data
 
-- Late-arriving: a share of orders come from stores with offline POS and land 1 to 3 days after `ordered_at`.
-- Corrected: a share of orders are later fixed (line quantity or unit price changed, promotion discount adjusted) or voided. The fix arrives in a later extract with a new `updated_at`.
+- Late-arriving: on a share of store-days the POS is offline, and the whole day syncs 1 to 3 days later. Those rows keep `created_at` as the sale time and get `updated_at` as the sync time, so a watermark extract on `updated_at` picks them up on the sync day.
+- Corrected: a share of orders are later fixed (line quantity or unit price changed, promotion discount adjusted) or voided, 1 to 10 days after they first landed. The fix arrives in a later extract with a new `updated_at`, and discounts stay capped at the order's gross.
 - The source never hard-deletes rows. A watermark extract cannot see a deleted row, so cancellation is expressed as the `voided` status, as most POS systems do.
 - Shifts are occasionally corrected (end time fixed).
 
@@ -119,17 +119,17 @@ Without late and corrected data, the comparison of history handling would be mea
 
 ### 4.6 Scale profiles
 
-| Profile | Stores (end of base) | Order lines (approx.) | Use |
+| Profile | Stores at start, opened, closed | Order lines (approx.) | Use |
 |---|---|---|---|
-| `small` | 8 | 150 thousand | CI, tests, development |
-| `medium` | 40 | 3 million | Local checks before a large run |
-| `large` | 150 | 30 million | Benchmark |
+| `small` | 8, 2, 1 | 180 thousand | CI, tests, development |
+| `medium` | 40, 6, 3 | 3.5 million | Local checks before a large run |
+| `large` | 150, 20, 8 | 30 million | Benchmark |
 
-Profiles are YAML files. All profiles cover the full 546-day timeline so that every question (cohorts, year-over-year growth) is meaningful at every scale.
+Profiles are YAML files. All profiles cover the full 547-day timeline so that every question (cohorts, year-over-year growth) is meaningful at every scale.
 
 ### 4.7 Truth manifest
 
-The generator also writes `truth_manifest.json` with facts it knows from the simulation: final completed order count, final net revenue per day, number of tier changes, number of late and corrected orders. These are used to test the reference answers themselves (section 8).
+The generator also writes `data/<scale>/truth_manifest.json` with facts it knows from its own simulation, computed independently of the files it wrote: landed, completed, voided, late and corrected order counts; final net revenue in total and per order date; completed orders per order date; tier upgrades and downgrades, address moves, price changes, promotion edits, store openings and closings; rows written per table; profile, seed and generator version. Tests recount the landed files and must match it exactly, and the reference answers are checked against it (section 8).
 
 ## 5. Landing and staging
 
