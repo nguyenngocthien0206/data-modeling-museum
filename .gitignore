@@ -221,3 +221,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Local drafts of issues and PR descriptions (never committed)
+.drafts/
+
+# Generated landing data and DuckDB files (per scale profile)
+data/
