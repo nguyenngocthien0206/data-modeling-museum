@@ -1,6 +1,6 @@
 """Command line entry point: `uv run museum <command>`.
 
-Every command is a stub for now. Each one is filled in by the issue that builds it.
+Commands that are not built yet are stubs that exit with code 2.
 """
 
 from __future__ import annotations
@@ -8,6 +8,7 @@ from __future__ import annotations
 import argparse
 import sys
 from collections.abc import Sequence
+from pathlib import Path
 
 from museum import __version__
 
@@ -31,6 +32,9 @@ def build_parser() -> argparse.ArgumentParser:
     generate = commands.add_parser("generate", help="generate the simulated source data")
     _add_scale(generate)
     generate.add_argument("--seed", type=int, default=None, help="override the profile seed")
+    generate.add_argument(
+        "--data-dir", type=Path, default=Path("data"), help="where data/<scale>/landing goes"
+    )
 
     build = commands.add_parser("build", help="build staging and the data models")
     _add_scale(build)
@@ -61,8 +65,23 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def run_generate(args: argparse.Namespace) -> int:
+    from museum.generator import generate, landing_root, load_profile
+
+    profile = load_profile(args.scale, seed=args.seed)
+    summary = generate(profile, args.data_dir)
+    print(f"generated {summary.profile} (seed {summary.seed}, {summary.days} days)")
+    print(f"  landing: {landing_root(args.data_dir, profile)}")
+    for table_name, rows in summary.rows.items():
+        print(f"  {table_name:<16} {rows:>12,} rows")
+    print(f"  took {summary.seconds} s")
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.command == "generate":
+        return run_generate(args)
     name = args.command if args.command != "challenge" else f"challenge {args.action}"
     print(f"museum {name}: not implemented yet", file=sys.stderr)
     return NOT_IMPLEMENTED

@@ -20,7 +20,6 @@ def test_help_lists_every_command(capsys):
 @pytest.mark.parametrize(
     "argv",
     [
-        ["generate", "--scale", "small"],
         ["build", "--model", "kimball"],
         ["verify"],
         ["bench"],
