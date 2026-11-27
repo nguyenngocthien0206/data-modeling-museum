@@ -103,7 +103,8 @@ Each row carries `_load_date`. A key appears at most once per extract. Intra-day
 ### 4.4 Late and corrected data
 
 - Late-arriving: a share of orders come from stores with offline POS and land 1 to 3 days after `ordered_at`.
-- Corrected: a share of orders are later fixed (line quantity changed, line removed, promotion discount adjusted) or voided. The fix arrives in a later extract with a new `updated_at`.
+- Corrected: a share of orders are later fixed (line quantity or unit price changed, promotion discount adjusted) or voided. The fix arrives in a later extract with a new `updated_at`.
+- The source never hard-deletes rows. A watermark extract cannot see a deleted row, so cancellation is expressed as the `voided` status, as most POS systems do.
 - Shifts are occasionally corrected (end time fixed).
 
 Without late and corrected data, the comparison of history handling would be meaningless.
@@ -345,7 +346,8 @@ G2 (post-mvp): the oracle for "the report as exported on date D" is the question
 
 ## 11. Workflow and freeze points
 
-- Work is issue-driven: one GitHub issue, one PR. The repository owner creates issues and branches, commits, pushes, opens and merges PRs. The assistant designs, codes, tests and drafts issues, commit messages and PR descriptions in `.drafts/` (git-ignored).
+- Work is issue-driven. An issue is a unit of work (a problem to solve), written as a local draft in `.drafts/issues/` (git-ignored), not a GitHub issue. Issues are done in order, one branch and one PR each.
+- The assistant designs, codes and tests, creates the issue's branch, commits and pushes, then hands over a PR title and description and stops. The repository owner opens, reviews and merges the PR, and creates the fairness tags.
 - Each PR stays reviewable in one sitting, roughly under 400 changed lines excluding data and generated files.
 - Major modeling decisions are recorded as short ADRs in `docs/adr/`, shipped in the PR they belong to.
 - Two tags mark fairness checkpoints, both created by the owner:
