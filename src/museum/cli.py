@@ -35,6 +35,9 @@ def build_parser() -> argparse.ArgumentParser:
     generate.add_argument(
         "--data-dir", type=Path, default=Path("data"), help="where data/<scale>/landing goes"
     )
+    generate.add_argument(
+        "--workers", type=int, default=None, help="parallel processes (default: by scale)"
+    )
 
     build = commands.add_parser("build", help="build staging and the data models")
     _add_scale(build)
@@ -66,15 +69,16 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def run_generate(args: argparse.Namespace) -> int:
-    from museum.generator import generate, landing_root, load_profile
+    from museum.generator import generate, landing_root, load_profile, manifest_path
 
     profile = load_profile(args.scale, seed=args.seed)
-    summary = generate(profile, args.data_dir)
+    summary = generate(profile, args.data_dir, workers=args.workers)
     print(f"generated {summary.profile} (seed {summary.seed}, {summary.days} days)")
-    print(f"  landing: {landing_root(args.data_dir, profile)}")
+    print(f"  landing:  {landing_root(args.data_dir, profile)}")
+    print(f"  manifest: {manifest_path(args.data_dir, profile)}")
     for table_name, rows in summary.rows.items():
         print(f"  {table_name:<16} {rows:>12,} rows")
-    print(f"  took {summary.seconds} s")
+    print(f"  took {summary.seconds} s with {summary.workers} worker(s)")
     return 0
 
 
