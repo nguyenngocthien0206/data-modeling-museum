@@ -1,0 +1,23 @@
+version: 2
+
+sources:
+  - name: landing
+    description: Daily extracts of the simulated POS, one parquet part or more per load date.
+    config:
+      external_location: "read_parquet('{{ env_var('MUSEUM_LANDING_DIR') }}/{name}/*/*.parquet', hive_partitioning = false)"
+    tables:
+      - name: province
+      - name: district
+      - name: ward
+      - name: store
+      - name: channel
+      - name: membership_tier
+      - name: customer
+      - name: product_category
+      - name: product
+      - name: promotion
+      - name: employee
+      - name: shift
+      - name: sales_order
+      - name: order_line
+      - name: order_promotion
