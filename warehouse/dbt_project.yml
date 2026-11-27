@@ -1,0 +1,22 @@
+name: museum
+version: "0.1.0"
+config-version: 2
+profile: museum
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+test-paths: ["tests"]
+
+flags:
+  # Never phone home from a reader's laptop or from CI.
+  send_anonymous_usage_stats: false
+
+vars:
+  # Hide every extract landed after this date ("today is day D"). Unset: everything.
+  as_of_load_date: null
+
+models:
+  museum:
+    staging:
+      +materialized: view
+      +database: staging

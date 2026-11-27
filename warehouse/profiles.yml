@@ -1,0 +1,18 @@
+# Paths come from environment variables that `museum build` sets for the chosen scale.
+# One DuckDB file per model (ADR-0005); staging is the main database, the models attach.
+museum:
+  target: local
+  outputs:
+    local:
+      type: duckdb
+      path: "{{ env_var('MUSEUM_WAREHOUSE_DIR') }}/staging.duckdb"
+      threads: 4
+      attach:
+        - path: "{{ env_var('MUSEUM_WAREHOUSE_DIR') }}/three_nf.duckdb"
+          alias: three_nf
+        - path: "{{ env_var('MUSEUM_WAREHOUSE_DIR') }}/kimball.duckdb"
+          alias: kimball
+        - path: "{{ env_var('MUSEUM_WAREHOUSE_DIR') }}/data_vault.duckdb"
+          alias: data_vault
+        - path: "{{ env_var('MUSEUM_WAREHOUSE_DIR') }}/obt.duckdb"
+          alias: obt
