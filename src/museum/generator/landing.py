@@ -1,9 +1,11 @@
 """Write daily extracts in the landing layout.
 
-    <root>/<table>/load_date=YYYY-MM-DD/part-0.parquet
+    <root>/<table>/load_date=YYYY-MM-DD/part-<name>.parquet
 
-Each file carries a `_load_date` column. A batch that does not match its table schema
-(missing or extra columns, wrong types, nulls in a required column) is refused.
+A partition may hold several parts (for example on-time rows of that day plus late or
+corrected rows from earlier days). Each file carries a `_load_date` column. A batch that
+does not match its table schema (missing or extra columns, wrong types, nulls in a
+required column) is refused, and a part is never written twice.
 """
 
 from __future__ import annotations
@@ -48,17 +50,21 @@ class LandingWriter:
             shutil.rmtree(self.root)
         self.root.mkdir(parents=True)
 
-    def path(self, table_name: str, load_date: date) -> Path:
+    def path(self, table_name: str, load_date: date, part: str = "0") -> Path:
         partition = f"load_date={load_date.isoformat()}"
-        return self.root / table_name / partition / "part-0.parquet"
+        return self.root / table_name / partition / f"part-{part}.parquet"
 
-    def write(self, table_name: str, load_date: date, columns: dict) -> Path | None:
+    def write(
+        self, table_name: str, load_date: date, columns: dict, part: str = "0"
+    ) -> Path | None:
         table = conform(table_name, columns)
         if table.num_rows == 0:
             return None
         load = pa.array([load_date] * table.num_rows, type=pa.date32())
         table = table.append_column(pa.field("_load_date", pa.date32(), nullable=False), load)
-        target = self.path(table_name, load_date)
+        target = self.path(table_name, load_date, part)
+        if target.exists():
+            raise FileExistsError(f"{target} was already written")
         target.parent.mkdir(parents=True, exist_ok=True)
         pq.write_table(table, target, compression="zstd")
         self.rows[table_name] = self.rows.get(table_name, 0) + table.num_rows
