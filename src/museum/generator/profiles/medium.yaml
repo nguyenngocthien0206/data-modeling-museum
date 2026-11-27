@@ -1,0 +1,24 @@
+# Local checks before a large run: about 3 million order lines.
+name: medium
+seed: 20240101
+period:
+  start: 2024-01-01
+  end: 2025-06-30
+stores: 40
+orders_per_store_day: 85
+extra_lines_per_order: 0.6
+members: 60000
+guest_share: 0.45
+promotion_shares:
+  one: 0.18
+  two: 0.05
+  three: 0.01
+promotions_per_month: 2
+workforce:
+  staff_per_slot: 2
+  monthly_turnover: 0.03
+  monthly_transfer: 0.01
+  shift_correction_rate: 0.01
+expect:
+  orders: [1600000, 2300000]
+  order_lines: [2600000, 3800000]

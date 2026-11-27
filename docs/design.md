@@ -111,7 +111,8 @@ Without late and corrected data, the comparison of history handling would be mea
 
 ### 4.5 Realism and determinism
 
-- Faker with locale `vi_VN` generates people and addresses (names, phone numbers, emails, street lines). It is used only for entities, because it is too slow for tens of millions of order lines.
+- Faker with locale `vi_VN` supplies the name lists (family, middle and given names) and a pool of street addresses. Names are composed in Vietnamese order (family, middle, given), because Faker's own vi_VN formats put the given name first. Faker fills small pools once and numpy picks from them, since calling Faker per person is too slow at the large scale.
+- Phone numbers are unique 10-digit Vietnamese mobile numbers (they are the matching key in the delivery-partner challenge). Emails use reserved example domains, so no generated address can belong to a real person.
 - Orders, lines and promotions are generated with numpy in daily batches and written with pyarrow.
 - Every random stream is seeded from `(global_seed, table, day)`. The same seed always gives byte-identical parquet, and days can be generated in parallel.
 - Province names are real (Ha Noi, TP. Ho Chi Minh, Binh Duong, Ba Ria - Vung Tau, Dong Nai, Hai Phong, Hai Duong, Da Nang, Quang Nam, Can Tho, Khanh Hoa and a few more). Districts and wards are simulated. The merger challenge follows the real 2025 provincial merges for these provinces, simplified to merges only (no ward splits).
