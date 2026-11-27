@@ -422,8 +422,11 @@ Commands (the CLI is the real entry point; the Makefile wraps it for convenience
 | `uv run museum verify` | Run all questions on all models and compare with oracles |
 | `uv run museum bench` | Run complexity, timing, build, storage and code metrics |
 | `uv run museum challenge run <id>` | Run one challenge on all models |
+| `uv run museum challenge diff <id> <model>` | Print one model's logical diff for a challenge |
 | `uv run museum report` | Generate `results/` tables and charts |
 | `uv run museum all` (or `make all`) | Everything above in order |
+
+Every command that touches data takes `--scale small|medium|large` (default `small`). The Makefile also offers `make lint`, `make format` and `make test`.
 
 CI (GitHub Actions) runs ruff, pytest, and `museum all --scale small`, plus the two tag guards.
 
