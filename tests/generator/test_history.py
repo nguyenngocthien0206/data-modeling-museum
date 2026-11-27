@@ -8,7 +8,7 @@ from museum.generator import load_profile
 from museum.generator.config import ProfileError
 from museum.generator.schemas import KEYS
 
-from .conftest import scalar
+from ..helpers import scalar
 
 PROFILE = load_profile("small")
 

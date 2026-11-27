@@ -1,0 +1,440 @@
+version: 2
+
+models:
+  - name: stg_province__versions
+    description: Every landed version of province, with _load_date.
+    data_tests:
+      - unique_key:
+          arguments:
+            columns: [province_code, _load_date]
+  - name: stg_province
+    description: Latest version of each province key.
+    data_tests:
+      - unique_key:
+          arguments:
+            columns: [province_code]
+    columns:
+      - name: province_code
+        data_tests:
+          - not_null
+      - name: province_name
+        data_tests:
+          - not_null
+  - name: stg_district__versions
+    description: Every landed version of district, with _load_date.
+    data_tests:
+      - unique_key:
+          arguments:
+            columns: [district_code, _load_date]
+  - name: stg_district
+    description: Latest version of each district key.
+    data_tests:
+      - unique_key:
+          arguments:
+            columns: [district_code]
+    columns:
+      - name: district_code
+        data_tests:
+          - not_null
+      - name: province_code
+        data_tests:
+          - not_null
+      - name: district_name
+        data_tests:
+          - not_null
+  - name: stg_ward__versions
+    description: Every landed version of ward, with _load_date.
+    data_tests:
+      - unique_key:
+          arguments:
+            columns: [ward_code, _load_date]
+  - name: stg_ward
+    description: Latest version of each ward key.
+    data_tests:
+      - unique_key:
+          arguments:
+            columns: [ward_code]
+    columns:
+      - name: ward_code
+        data_tests:
+          - not_null
+      - name: district_code
+        data_tests:
+          - not_null
+      - name: ward_name
+        data_tests:
+          - not_null
+  - name: stg_store__versions
+    description: Every landed version of store, with _load_date.
+    data_tests:
+      - unique_key:
+          arguments:
+            columns: [store_id, _load_date]
+  - name: stg_store
+    description: Latest version of each store key.
+    data_tests:
+      - unique_key:
+          arguments:
+            columns: [store_id]
+    columns:
+      - name: store_id
+        data_tests:
+          - not_null
+      - name: store_code
+        data_tests:
+          - not_null
+      - name: store_name
+        data_tests:
+          - not_null
+      - name: ward_code
+        data_tests:
+          - not_null
+      - name: address_line
+        data_tests:
+          - not_null
+      - name: opened_on
+        data_tests:
+          - not_null
+      - name: status
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [planned, open, closed]
+  - name: stg_channel__versions
+    description: Every landed version of channel, with _load_date.
+    data_tests:
+      - unique_key:
+          arguments:
+            columns: [channel_code, _load_date]
+  - name: stg_channel
+    description: Latest version of each channel key.
+    data_tests:
+      - unique_key:
+          arguments:
+            columns: [channel_code]
+    columns:
+      - name: channel_code
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [dine_in, takeaway]
+      - name: channel_name
+        data_tests:
+          - not_null
+  - name: stg_membership_tier__versions
+    description: Every landed version of membership_tier, with _load_date.
+    data_tests:
+      - unique_key:
+          arguments:
+            columns: [tier_code, _load_date]
+  - name: stg_membership_tier
+    description: Latest version of each membership_tier key.
+    data_tests:
+      - unique_key:
+          arguments:
+            columns: [tier_code]
+    columns:
+      - name: tier_code
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [MEMBER, SILVER, GOLD, DIAMOND]
+      - name: tier_name
+        data_tests:
+          - not_null
+      - name: rank
+        data_tests:
+          - not_null
+      - name: min_spend_12m
+        data_tests:
+          - not_null
+  - name: stg_customer__versions
+    description: Every landed version of customer, with _load_date.
+    data_tests:
+      - unique_key:
+          arguments:
+            columns: [customer_id, _load_date]
+  - name: stg_customer
+    description: Latest version of each customer key.
+    data_tests:
+      - unique_key:
+          arguments:
+            columns: [customer_id]
+    columns:
+      - name: full_name
+        data_tests:
+          - not_null
+      - name: phone
+        data_tests:
+          - not_null
+      - name: email
+        data_tests:
+          - not_null
+      - name: date_of_birth
+        data_tests:
+          - not_null
+      - name: gender
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [F, M]
+      - name: address_line
+        data_tests:
+          - not_null
+      - name: ward_code
+        data_tests:
+          - not_null
+      - name: tier_code
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [MEMBER, SILVER, GOLD, DIAMOND]
+      - name: joined_at
+        data_tests:
+          - not_null
+  - name: stg_product_category__versions
+    description: Every landed version of product_category, with _load_date.
+    data_tests:
+      - unique_key:
+          arguments:
+            columns: [category_id, _load_date]
+  - name: stg_product_category
+    description: Latest version of each product_category key.
+    data_tests:
+      - unique_key:
+          arguments:
+            columns: [category_id]
+    columns:
+      - name: category_id
+        data_tests:
+          - not_null
+      - name: category_name
+        data_tests:
+          - not_null
+  - name: stg_product__versions
+    description: Every landed version of product, with _load_date.
+    data_tests:
+      - unique_key:
+          arguments:
+            columns: [product_id, _load_date]
+  - name: stg_product
+    description: Latest version of each product key.
+    data_tests:
+      - unique_key:
+          arguments:
+            columns: [product_id]
+    columns:
+      - name: product_id
+        data_tests:
+          - not_null
+      - name: sku
+        data_tests:
+          - not_null
+      - name: product_name
+        data_tests:
+          - not_null
+      - name: category_id
+        data_tests:
+          - not_null
+      - name: size
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [S, M, L]
+      - name: list_price
+        data_tests:
+          - not_null
+      - name: is_active
+        data_tests:
+          - not_null
+  - name: stg_promotion__versions
+    description: Every landed version of promotion, with _load_date.
+    data_tests:
+      - unique_key:
+          arguments:
+            columns: [promotion_id, _load_date]
+  - name: stg_promotion
+    description: Latest version of each promotion key.
+    data_tests:
+      - unique_key:
+          arguments:
+            columns: [promotion_id]
+    columns:
+      - name: promotion_id
+        data_tests:
+          - not_null
+      - name: promo_code
+        data_tests:
+          - not_null
+      - name: promo_name
+        data_tests:
+          - not_null
+      - name: promo_type
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [percent_off, amount_off]
+      - name: promo_value
+        data_tests:
+          - not_null
+      - name: starts_on
+        data_tests:
+          - not_null
+      - name: ends_on
+        data_tests:
+          - not_null
+  - name: stg_employee__versions
+    description: Every landed version of employee, with _load_date.
+    data_tests:
+      - unique_key:
+          arguments:
+            columns: [employee_id, _load_date]
+  - name: stg_employee
+    description: Latest version of each employee key.
+    data_tests:
+      - unique_key:
+          arguments:
+            columns: [employee_id]
+    columns:
+      - name: employee_id
+        data_tests:
+          - not_null
+      - name: full_name
+        data_tests:
+          - not_null
+      - name: home_store_id
+        data_tests:
+          - not_null
+      - name: role
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [store_manager, barista, cashier]
+      - name: hired_on
+        data_tests:
+          - not_null
+  - name: stg_shift__versions
+    description: Every landed version of shift, with _load_date.
+    data_tests:
+      - unique_key:
+          arguments:
+            columns: [shift_id, _load_date]
+  - name: stg_shift
+    description: Latest version of each shift key.
+    data_tests:
+      - unique_key:
+          arguments:
+            columns: [shift_id]
+    columns:
+      - name: shift_id
+        data_tests:
+          - not_null
+      - name: store_id
+        data_tests:
+          - not_null
+      - name: employee_id
+        data_tests:
+          - not_null
+      - name: shift_start
+        data_tests:
+          - not_null
+      - name: shift_end
+        data_tests:
+          - not_null
+  - name: stg_sales_order__versions
+    description: Every landed version of sales_order, with _load_date.
+    data_tests:
+      - unique_key:
+          arguments:
+            columns: [order_id, _load_date]
+  - name: stg_sales_order
+    description: Latest version of each sales_order key.
+    data_tests:
+      - unique_key:
+          arguments:
+            columns: [order_id]
+    columns:
+      - name: order_id
+        data_tests:
+          - not_null
+      - name: store_id
+        data_tests:
+          - not_null
+      - name: cashier_employee_id
+        data_tests:
+          - not_null
+      - name: channel_code
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [dine_in, takeaway]
+      - name: ordered_at
+        data_tests:
+          - not_null
+      - name: status
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [completed, voided]
+  - name: stg_order_line__versions
+    description: Every landed version of order_line, with _load_date.
+    data_tests:
+      - unique_key:
+          arguments:
+            columns: [order_id, line_no, _load_date]
+  - name: stg_order_line
+    description: Latest version of each order_line key.
+    data_tests:
+      - unique_key:
+          arguments:
+            columns: [order_id, line_no]
+    columns:
+      - name: order_id
+        data_tests:
+          - not_null
+      - name: line_no
+        data_tests:
+          - not_null
+      - name: product_id
+        data_tests:
+          - not_null
+      - name: quantity
+        data_tests:
+          - not_null
+      - name: unit_price
+        data_tests:
+          - not_null
+      - name: line_amount
+        data_tests:
+          - not_null
+  - name: stg_order_promotion__versions
+    description: Every landed version of order_promotion, with _load_date.
+    data_tests:
+      - unique_key:
+          arguments:
+            columns: [order_id, promotion_id, _load_date]
+  - name: stg_order_promotion
+    description: Latest version of each order_promotion key.
+    data_tests:
+      - unique_key:
+          arguments:
+            columns: [order_id, promotion_id]
+    columns:
+      - name: order_id
+        data_tests:
+          - not_null
+      - name: promotion_id
+        data_tests:
+          - not_null
+      - name: discount_amount
+        data_tests:
+          - not_null

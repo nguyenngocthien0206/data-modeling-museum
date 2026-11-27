@@ -1,0 +1,16 @@
+id: q01
+title: Net revenue per store per ISO week
+description: >
+  How much did each store take, after discounts, in each week? The baseline question:
+  every model should answer it easily, so it anchors the comparison.
+grain: one row per store and ISO week that has at least one completed order
+keys: [store_id, week_start]
+columns:
+  store_id: store key from the source (integer)
+  week_start: Monday of the ISO week of the order time, local time (date)
+  net_revenue: gross line amounts minus promotion discounts, in VND (integer)
+rules:
+  - Use the final version of every order, line and order promotion (the newest extract wins).
+  - Count completed orders only; a voided order contributes nothing.
+  - The week comes from ordered_at, not from the load date, so late orders count in the week they were sold.
+  - Net revenue of an order is the sum of its line_amount minus the sum of its discount_amount.
